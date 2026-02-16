@@ -5,11 +5,15 @@ import cors from 'cors';
 const app = express();
 const PORT = 8000;
 
-app.use(cors({
-  origin: process.env.FRONTEND_URL,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true
-}))
+if (!process.env.FRONTEND_URL) {
+    console.warn('FRONTEND_URL is not defined, CORS may not work correctly for credentialed requests');
+  }
+
+    app.use(cors({
+      origin: process.env.FRONTEND_URL,
+      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      credentials: true
+}));
 
 app.use(express.json());
 
