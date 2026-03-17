@@ -10,20 +10,32 @@ import { toNodeHandler } from "better-auth/node";
 import subjectsRouter from "./routes/subject.js";
 import usersRouter from "./routes/users.js";
 import classesRouter from "./routes/classes.js";
-//import departmentsRouter from "./routes/departments.js";
-//import statsRouter from "./routes/stats.js";
-//import enrollmentsRouter from "./routes/enrollments.js";
+import departmentsRouter from "./routes/departments.js";
+import statsRouter from "./routes/stats.js";
+import enrollmentsRouter from "./routes/enrollments.js";
 
 // import securityMiddleware from "./middleware/security.js";
 import { auth } from "./lib/auth.js";
 
 const app = express();
-const PORT = 8000;
+const PORT = process.env.PORT || 8000;
+
+const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    "http://localhost:5173",
+    "http://localhost:3000",
+].map(url => url?.replace(/\/$/, "")).filter(Boolean);
 
 app.use(
     cors({
-        origin: process.env.FRONTEND_URL, // React app URL
-        methods: ["GET", "POST", "PUT", "DELETE"], // Specify allowed HTTP methods
+        origin: (origin, callback) => {
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error("Not allowed by CORS"));
+            }
+        },
+        methods: ["GET", "POST", "PUT", "DELETE", "PATCH"], // Specify allowed HTTP methods
         credentials: true, // allow cookies
     })
 );
@@ -37,9 +49,9 @@ app.use(express.json());
 app.use("/api/subjects", subjectsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/classes", classesRouter);
-//app.use("/api/departments", departmentsRouter);
-//app.use("/api/stats", statsRouter);
-//app.use("/api/enrollments", enrollmentsRouter);
+app.use("/api/departments", departmentsRouter);
+app.use("/api/stats", statsRouter);
+app.use("/api/enrollments", enrollmentsRouter);
 
 app.get("/", (req, res) => {
     res.send("Backend server is running!");
