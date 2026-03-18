@@ -6,13 +6,12 @@ import cors from "cors";
 import express from "express";
 import { toNodeHandler } from "better-auth/node";
 
-// @ts-ignore
 import subjectsRouter from "./routes/subject.js";
 import usersRouter from "./routes/users.js";
 import classesRouter from "./routes/classes.js";
-//import departmentsRouter from "./routes/departments.js";
-//import statsRouter from "./routes/stats.js";
-//import enrollmentsRouter from "./routes/enrollments.js";
+import departmentsRouter from "./routes/departments.js";
+import statsRouter from "./routes/stats.js";
+import enrollmentsRouter from "./routes/enrollments.js";
 
 // import securityMiddleware from "./middleware/security.js";
 import { auth } from "./lib/auth.js";
@@ -37,9 +36,9 @@ app.use(express.json());
 app.use("/api/subjects", subjectsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/classes", classesRouter);
-//app.use("/api/departments", departmentsRouter);
-//app.use("/api/stats", statsRouter);
-//app.use("/api/enrollments", enrollmentsRouter);
+app.use("/api/departments", departmentsRouter);
+app.use("/api/stats", statsRouter);
+app.use("/api/enrollments", enrollmentsRouter);
 
 app.get("/", (req, res) => {
     res.send("Backend server is running!");
