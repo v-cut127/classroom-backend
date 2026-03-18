@@ -1,61 +1,136 @@
 import express from "express";
-import {and, eq, sql} from "drizzle-orm";
-import {enrollments, user, classes, departments, subjects} from "../db/schema/schema.js";
+import { desc, eq, getTableColumns, sql } from "drizzle-orm";
+
 import { db } from "../db/index.js";
+import { classes, departments, subjects, user } from "../db/schema/schema.js";
 
 const router = express.Router();
 
-router.get('/', async (req, res) => {
+// Overview counts for core entities
+router.get("/overview", async (req, res) => {
     try {
-        // User Distribution
-        const usersByRole = await db.select({
-            role: user.role,
-            count: sql<number>`count(*)`.mapWith(Number)
-        }).from(user).groupBy(user.role);
-
-        // Classes by Department
-        const classesByDept = await db.select({
-            departmentName: departments.name,
-            count: sql<number>`count(*)`.mapWith(Number)
-        }).from(classes)
-          .innerJoin(subjects, eq(classes.subjectId, subjects.id))
-          .innerJoin(departments, eq(subjects.departmentId, departments.id))
-          .groupBy(departments.name);
-
-        // Capacity Status
-        const capacityStatus = await db.select({
-            classId: classes.id,
-            className: classes.name,
-            capacity: classes.capacity,
-            enrolledCount: sql<number>`count(${enrollments.studentId})`.mapWith(Number)
-        }).from(classes)
-          .leftJoin(enrollments, eq(classes.id, enrollments.classId))
-          .groupBy(classes.id, classes.name, classes.capacity);
-
-        // Key Metrics
-        const [userCount] = await db.select({ count: sql<number>`count(*)` }).from(user);
-        const [classCount] = await db.select({ count: sql<number>`count(*)` }).from(classes);
-        const [enrollmentCount] = await db.select({ count: sql<number>`count(*)` }).from(enrollments);
-
-        // Enrollment Trends (last 7 days - mock or real if we have timestamps)
-        // Since enrollments table in schema doesn't have timestamps, we might need to add it or mock it.
-        // Let's check schema again. Enrollments doesn't have timestamps.
-        // I'll return mock data for trends or just total for now.
+        const [
+            usersCount,
+            teachersCount,
+            adminsCount,
+            subjectsCount,
+            departmentsCount,
+            classesCount,
+        ] = await Promise.all([
+            db.select({ count: sql<number>`count(*)` }).from(user),
+            db
+                .select({ count: sql<number>`count(*)` })
+                .from(user)
+                .where(eq(user.role, "teacher")),
+            db
+                .select({ count: sql<number>`count(*)` })
+                .from(user)
+                .where(eq(user.role, "admin")),
+            db.select({ count: sql<number>`count(*)` }).from(subjects),
+            db.select({ count: sql<number>`count(*)` }).from(departments),
+            db.select({ count: sql<number>`count(*)` }).from(classes),
+        ]);
 
         res.status(200).json({
-            usersByRole,
-            classesByDept,
-            capacityStatus,
-            metrics: {
-                totalUsers: Number(userCount.count),
-                totalClasses: Number(classCount.count),
-                totalEnrollments: Number(enrollmentCount.count)
-            }
+            data: {
+                users: usersCount[0]?.count ?? 0,
+                teachers: teachersCount[0]?.count ?? 0,
+                admins: adminsCount[0]?.count ?? 0,
+                subjects: subjectsCount[0]?.count ?? 0,
+                departments: departmentsCount[0]?.count ?? 0,
+                classes: classesCount[0]?.count ?? 0,
+            },
         });
+    } catch (error) {
+        console.error("GET /stats/overview error:", error);
+        res.status(500).json({ error: "Failed to fetch overview stats" });
+    }
+});
 
-    } catch (e) {
-        console.error(`GET /stats error: ${e}`);
-        res.status(500).json({ error: 'Failed to load stats' });
+// Latest activity summaries
+router.get("/latest", async (req, res) => {
+    try {
+        const { limit = 5 } = req.query;
+        const limitPerPage = Math.max(1, +limit);
+
+        const [latestClasses, latestTeachers] = await Promise.all([
+            db
+                .select({
+                    ...getTableColumns(classes),
+                    subject: {
+                        ...getTableColumns(subjects),
+                    },
+                    teacher: {
+                        ...getTableColumns(user),
+                    },
+                })
+                .from(classes)
+                .leftJoin(subjects, eq(classes.subjectId, subjects.id))
+                .leftJoin(user, eq(classes.teacherId, user.id))
+                .orderBy(desc(classes.createdAt))
+                .limit(limitPerPage),
+            db
+                .select()
+                .from(user)
+                .where(eq(user.role, "teacher"))
+                .orderBy(desc(user.createdAt))
+                .limit(limitPerPage),
+        ]);
+
+        res.status(200).json({
+            data: {
+                latestClasses,
+                latestTeachers,
+            },
+        });
+    } catch (error) {
+        console.error("GET /stats/latest error:", error);
+        res.status(500).json({ error: "Failed to fetch latest stats" });
+    }
+});
+
+// Aggregates for charts
+router.get("/charts", async (req, res) => {
+    try {
+        const [usersByRole, subjectsByDepartment, classesBySubject] =
+            await Promise.all([
+                db
+                    .select({
+                        role: user.role,
+                        total: sql<number>`count(*)`,
+                    })
+                    .from(user)
+                    .groupBy(user.role),
+                db
+                    .select({
+                        departmentId: departments.id,
+                        departmentName: departments.name,
+                        totalSubjects: sql<number>`count(${subjects.id})`,
+                    })
+                    .from(departments)
+                    .leftJoin(subjects, eq(subjects.departmentId, departments.id))
+                    .groupBy(departments.id),
+                db
+                    .select({
+                        subjectId: subjects.id,
+                        subjectName: subjects.name,
+                        totalClasses: sql<number>`count(${classes.id})`,
+                    })
+                    .from(subjects)
+                    .leftJoin(classes, eq(classes.subjectId, subjects.id))
+                    .groupBy(subjects.id),
+            ]);
+
+        res.status(200).json({
+            data: {
+                usersByRole,
+                subjectsByDepartment,
+                classesBySubject,
+            },
+        });
+    } catch (error) {
+        console.error("GET /stats/charts error:", error);
+        res.status(500).json({ error: "Failed to fetch chart stats" });
     }
 });
 
