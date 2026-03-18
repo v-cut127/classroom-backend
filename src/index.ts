@@ -28,14 +28,8 @@ const allowedOrigins = [
 
 app.use(
     cors({
-        origin: (origin, callback) => {
-            if (!origin || allowedOrigins.includes(origin)) {
-                callback(null, true);
-            } else {
-                callback(new Error("Not allowed by CORS"));
-            }
-        },
-        methods: ["GET", "POST", "PUT", "DELETE", "PATCH"], // Specify allowed HTTP methods
+        origin: process.env.FRONTEND_URL, // React app URL
+        methods: ["GET", "POST", "PUT", "DELETE"], // Specify allowed HTTP methods
         credentials: true, // allow cookies
     })
 );
